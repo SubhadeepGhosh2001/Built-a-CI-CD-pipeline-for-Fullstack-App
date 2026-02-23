@@ -115,19 +115,10 @@ pipeline {
     }
 
     post {
-        success {
-            emailext(
-                subject: "SUCCESS: ${JOB_NAME} #${BUILD_NUMBER}",
-                body: "Deployment successful.\nCheck: ${BUILD_URL}",
-                to: "${EMAIL}"
-            )
-        }
-        failure {
-            emailext(
-                subject: "FAILED: ${JOB_NAME} #${BUILD_NUMBER}",
-                body: "Pipeline failed.\nCheck: ${BUILD_URL}",
-                to: "${EMAIL}"
-            )
-        }
+    success {
+        mail to: 'yourmail@gmail.com',
+             subject: "Build Success",
+             body: "Pipeline completed successfully"
     }
+}
 }
