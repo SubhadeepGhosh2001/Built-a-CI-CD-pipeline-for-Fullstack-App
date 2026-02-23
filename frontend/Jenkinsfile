@@ -116,7 +116,7 @@ pipeline {
 
     post {
     success {
-        mail to: 'yourmail@gmail.com',
+        mail to: 'subhadeepghosh1270@gmail.com',
              subject: "Build Success",
              body: "Pipeline completed successfully"
     }
