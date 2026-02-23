@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE = "subhadeep2001/chat-frontend"
-        SONAR_HOST = "http://host.docker.internal:9000"
+        SONAR_HOST = "http://localhost:9000"
         EMAIL = "subhadeepghosh1270@gmail.com"
     }
 
