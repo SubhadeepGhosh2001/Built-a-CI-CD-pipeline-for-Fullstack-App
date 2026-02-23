@@ -3,12 +3,9 @@ pipeline {
 
     environment {
         IMAGE = "subhadeep2001/chat-frontend"
-        SONAR_HOST = "http://localhost:9000"
-        EMAIL = "subhadeepghosh1270@gmail.com"
-    }
-
-    options {
-        timestamps()
+        DOCKER_CREDENTIALS_ID = "docker-cred"
+        SONAR_TOKEN = credentials('sonar-token')
+        DOCKER_PASS = credentials('docker-pass')
     }
 
     stages {
@@ -21,7 +18,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
+                git branch: 'main', 
                     url: 'https://github.com/SubhadeepGhosh2001/Built-a-CI-CD-pipeline-for-Fullstack-App.git'
             }
         }
@@ -44,23 +41,21 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    dir('frontend') {
-                        sh """
-                        sonar-scanner \
-                        -Dsonar.projectKey=chat-frontend \
-                        -Dsonar.sources=src \
-                        -Dsonar.host.url=$SONAR_HOST \
-                        -Dsonar.login=$SONAR_TOKEN
-                        """
-                    }
+                dir('frontend') {
+                    sh """
+                    sonar-scanner \
+                    -Dsonar.projectKey=chat-frontend \
+                    -Dsonar.sources=src \
+                    -Dsonar.host.url=http://localhost:9000 \
+                    -Dsonar.login=${SONAR_TOKEN}
+                    """
                 }
             }
         }
 
         stage('Trivy FileSystem Scan') {
             steps {
-                sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL frontend/'
+                sh 'trivy fs --severity HIGH,CRITICAL frontend/ > trivyfs.txt'
             }
         }
 
@@ -69,56 +64,71 @@ pipeline {
                 sh """
                 docker build \
                 --build-arg VITE_API_URL=http://backend-service:5001/api \
-                -t $IMAGE:${BUILD_NUMBER} \
-                -t $IMAGE:latest \
-                frontend
+                -t ${IMAGE}:${BUILD_NUMBER} \
+                -t ${IMAGE}:latest frontend
                 """
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE:${BUILD_NUMBER}'
+                sh "trivy image --severity HIGH,CRITICAL ${IMAGE}:${BUILD_NUMBER} > trivyimage.txt"
             }
         }
 
         stage('Push to DockerHub') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withCredentials([string(credentialsId: 'docker-pass', variable: 'DOCKER_PASS')]) {
                     sh """
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $IMAGE:${BUILD_NUMBER}
-                    docker push $IMAGE:latest
+                    echo \$DOCKER_PASS | docker login -u subhadeep2001 --password-stdin
+                    docker push ${IMAGE}:${BUILD_NUMBER}
+                    docker push ${IMAGE}:latest
                     """
                 }
             }
         }
 
         stage('Deploy to Minikube') {
-    steps {
-        dir('frontend') {
-            sh """
-            kubectl apply -f k8s/
-            kubectl set image deployment/frontend \
-            frontend=$IMAGE:${BUILD_NUMBER}
-            kubectl rollout status deployment/frontend
-            kubectl get pods
-            kubectl get svc
-            """
+            steps {
+                dir('frontend') {
+                    sh """
+                    kubectl apply -f k8s/
+                    kubectl set image deployment/frontend frontend=${IMAGE}:${BUILD_NUMBER}
+                    kubectl rollout status deployment/frontend
+                    kubectl get pods
+                    kubectl get svc
+                    """
+                }
+            }
         }
-    }
-}
     }
 
     post {
-    success {
-        mail to: 'subhadeepghosh1270@gmail.com',
-             subject: "Build Success",
-             body: "Pipeline completed successfully"
+        always {
+            script {
+
+                def buildStatus = currentBuild.currentResult
+
+                def cause = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                def buildUser = cause ? cause[0]?.userId : "GitHub Trigger"
+
+                emailext (
+                    subject: "Pipeline ${buildStatus}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: """
+                        <h2>Jenkins CI/CD Pipeline Report</h2>
+                        <p><b>Project:</b> ${env.JOB_NAME}</p>
+                        <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                        <p><b>Status:</b> ${buildStatus}</p>
+                        <p><b>Triggered By:</b> ${buildUser}</p>
+                        <p><b>Build URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                        <hr>
+                        <p>Trivy scan reports attached.</p>
+                    """,
+                    to: 'subhadeepghosh1270@gmail.com',
+                    mimeType: 'text/html',
+                    attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+                )
+            }
+        }
     }
-}
 }
