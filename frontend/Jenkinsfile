@@ -99,17 +99,19 @@ pipeline {
         }
 
         stage('Deploy to Minikube') {
-            steps {
-                sh """
-                kubectl apply -f k8s/
-                kubectl set image deployment/frontend \
-                frontend=$IMAGE:${BUILD_NUMBER}
-                kubectl rollout status deployment/frontend
-                kubectl get pods
-                kubectl get svc
-                """
-            }
+    steps {
+        dir('frontend') {
+            sh """
+            kubectl apply -f k8s/
+            kubectl set image deployment/frontend \
+            frontend=$IMAGE:${BUILD_NUMBER}
+            kubectl rollout status deployment/frontend
+            kubectl get pods
+            kubectl get svc
+            """
         }
+    }
+}
     }
 
     post {
