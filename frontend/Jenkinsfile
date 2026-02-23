@@ -1,0 +1,131 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE = "subhadeep2001/chat-frontend"
+        SONAR_HOST = "http://host.docker.internal:9000"
+        EMAIL = "subhadeepghosh1270@gmail.com"
+    }
+
+    options {
+        timestamps()
+    }
+
+    stages {
+
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/SubhadeepGhosh2001/starbucks-kubernetes.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir('frontend') {
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                dir('frontend') {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    dir('frontend') {
+                        sh """
+                        sonar-scanner \
+                        -Dsonar.projectKey=chat-frontend \
+                        -Dsonar.sources=src \
+                        -Dsonar.host.url=$SONAR_HOST \
+                        -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Trivy FileSystem Scan') {
+            steps {
+                sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL frontend/'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                docker build \
+                --build-arg VITE_API_URL=http://backend-service:5001/api \
+                -t $IMAGE:${BUILD_NUMBER} \
+                -t $IMAGE:latest \
+                frontend
+                """
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE:${BUILD_NUMBER}'
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push $IMAGE:${BUILD_NUMBER}
+                    docker push $IMAGE:latest
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Minikube') {
+            steps {
+                sh """
+                kubectl apply -f k8s/
+                kubectl set image deployment/frontend \
+                frontend=$IMAGE:${BUILD_NUMBER}
+                kubectl rollout status deployment/frontend
+                kubectl get pods
+                kubectl get svc
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            emailext(
+                subject: "SUCCESS: ${JOB_NAME} #${BUILD_NUMBER}",
+                body: "Deployment successful.\nCheck: ${BUILD_URL}",
+                to: "${EMAIL}"
+            )
+        }
+        failure {
+            emailext(
+                subject: "FAILED: ${JOB_NAME} #${BUILD_NUMBER}",
+                body: "Pipeline failed.\nCheck: ${BUILD_URL}",
+                to: "${EMAIL}"
+            )
+        }
+    }
+}
