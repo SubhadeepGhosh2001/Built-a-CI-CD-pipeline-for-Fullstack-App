@@ -24,7 +24,15 @@ dist-ssr
 *.sw?
 
 .env
-*.package.json
 
-*.package-lock.json
 *.yarn-integrity
+
+docker build -t chat-frontend:v1 .
+
+
+.dockerignore
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+.terraform.tfvars
