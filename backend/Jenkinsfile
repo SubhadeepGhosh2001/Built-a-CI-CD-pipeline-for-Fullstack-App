@@ -104,18 +104,16 @@ stage('Deploy to Minikube') {
         }
     }
 }
-}
-    }
 
     post {
         always {
             emailext (
                 subject: "Backend Pipeline ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                 body: """
-                    Backend CI/CD Pipeline Result:
-                    Status: ${currentBuild.currentResult}
-                    Build: ${env.BUILD_NUMBER}
-                    URL: ${env.BUILD_URL}
+Backend CI/CD Pipeline Result:
+Status: ${currentBuild.currentResult}
+Build: ${env.BUILD_NUMBER}
+URL: ${env.BUILD_URL}
                 """,
                 to: 'subhadeepghosh1270@gmail.com',
                 attachmentsPattern: 'backend/trivyfs.txt,backend/trivyimage.txt'
