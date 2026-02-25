@@ -17,6 +17,11 @@ spec:
           image: subhadeep2001/chat-backend:latest
           ports:
             - containerPort: 5001
+
+          envFrom:
+            - secretRef:
+                name: backend-secret   
+
           resources:
             requests:
               cpu: "100m"

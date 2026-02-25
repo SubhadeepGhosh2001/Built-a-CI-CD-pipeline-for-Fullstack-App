@@ -79,7 +79,8 @@ pipeline {
                     sh """
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     docker push $IMAGE:${BUILD_NUMBER}
-                    docker push $IMAGE:latest
+                    docker tag $IMAGE:${BUILD_NUMBER} $IMAGE:latest
+                    docker push $IMAGE:latest                    
                     """
                 }
             }
@@ -89,10 +90,19 @@ pipeline {
     steps {
         dir('backend') {
             sh """
+            echo "Updating Kubernetes Secret from .env..."
+            kubectl delete secret backend-secret --ignore-not-found
+            kubectl create secret generic backend-secret --from-env-file=.env
+
+            echo "Applying Kubernetes manifests..."
             kubectl apply -f k8s/
-            kubectl set image deployment/backend \
-            backend=$IMAGE:${BUILD_NUMBER}
+
+            echo "Updating backend image..."
+            kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
+
+            echo "Waiting for rollout..."
             kubectl rollout status deployment/backend
+
             kubectl get pods
             kubectl get svc
             """
