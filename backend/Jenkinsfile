@@ -85,29 +85,25 @@ pipeline {
                 }
             }
         }
-
-       stage('Deploy to Minikube') {
+stage('Deploy to Minikube') {
     steps {
         dir('backend') {
-            sh """
-            echo "Updating Kubernetes Secret from .env..."
-            kubectl delete secret backend-secret --ignore-not-found
-            kubectl create secret generic backend-secret --from-env-file=.env
+            withCredentials([file(credentialsId: 'backend-env', variable: 'ENV_FILE')]) {
+                sh """
+                echo "Creating Kubernetes Secret from Jenkins credential..."
+                kubectl delete secret backend-secret --ignore-not-found
+                kubectl create secret generic backend-secret --from-env-file=\$ENV_FILE
 
-            echo "Applying Kubernetes manifests..."
-            kubectl apply -f k8s/
-
-            echo "Updating backend image..."
-            kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
-
-            echo "Waiting for rollout..."
-            kubectl rollout status deployment/backend
-
-            kubectl get pods
-            kubectl get svc
-            """
+                kubectl apply -f k8s/
+                kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
+                kubectl rollout status deployment/backend
+                kubectl get pods
+                kubectl get svc
+                """
+            }
         }
     }
+}
 }
     }
 
