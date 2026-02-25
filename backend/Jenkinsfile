@@ -32,14 +32,16 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                dir('backend') {
-                    sh """
-                    sonar-scanner \
-                    -Dsonar.projectKey=chat-backend \
-                    -Dsonar.sources=. \
-                    -Dsonar.host.url=http://localhost:9000 \
-                    -Dsonar.login=${SONAR_TOKEN}
-                    """
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    dir('backend') {
+                        sh """
+                        sonar-scanner \
+                        -Dsonar.projectKey=Chat-Backend \
+                        -Dsonar.sources=src \
+                        -Dsonar.host.url=$SONAR_HOST \
+                        -Dsonar.login=$SONAR_TOKEN
+                        """
+                    }
                 }
             }
         }
