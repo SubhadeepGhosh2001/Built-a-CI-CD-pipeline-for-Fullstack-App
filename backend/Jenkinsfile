@@ -5,6 +5,7 @@ pipeline {
         IMAGE = "subhadeep2001/chat-backend"
         DOCKER_CREDENTIALS_ID = "docker-pass"
         SONAR_TOKEN = credentials('sonar-token')
+        SONAR_HOST = "http://localhost:9000"
     }
 
     stages {
