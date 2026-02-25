@@ -3,9 +3,8 @@ pipeline {
 
     environment {
         IMAGE = "subhadeep2001/chat-backend"
-        DOCKER_CREDENTIALS_ID = "docker-pass"
-        SONAR_TOKEN = credentials('sonar-token')
         SONAR_HOST = "http://localhost:9000"
+        EMAIL = "subhadeepghosh1270@gmail.com"
     }
 
     stages {
@@ -80,19 +79,26 @@ pipeline {
                     sh """
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     docker push $IMAGE:${BUILD_NUMBER}
+                    docker push $IMAGE:latest
                     """
                 }
             }
         }
 
-        stage('Deploy to Minikube') {
-            steps {
-                sh """
-                kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
-                kubectl rollout status deployment/backend
-                """
-            }
+       stage('Deploy to Minikube') {
+    steps {
+        dir('backend') {
+            sh """
+            kubectl apply -f k8s/
+            kubectl set image deployment/backend \
+            backend=$IMAGE:${BUILD_NUMBER}
+            kubectl rollout status deployment/backend
+            kubectl get pods
+            kubectl get svc
+            """
         }
+    }
+}
     }
 
     post {
