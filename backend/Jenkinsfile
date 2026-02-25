@@ -1,0 +1,110 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE = "subhadeep2001/chat-backend"
+        DOCKER_CREDENTIALS_ID = "docker-pass"
+        SONAR_TOKEN = credentials('sonar-token')
+    }
+
+    stages {
+
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/SubhadeepGhosh2001/Built-a-CI-CD-pipeline-for-Fullstack-App.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir('backend') {
+                    sh 'npm install'
+                }
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                dir('backend') {
+                    sh """
+                    sonar-scanner \
+                    -Dsonar.projectKey=chat-backend \
+                    -Dsonar.sources=. \
+                    -Dsonar.host.url=http://host.docker.internal:9000 \
+                    -Dsonar.login=${SONAR_TOKEN}
+                    """
+                }
+            }
+        }
+
+        stage('Trivy FileSystem Scan') {
+            steps {
+                dir('backend') {
+                    sh 'trivy fs --format table -o trivyfs.txt .'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('backend') {
+                    sh """
+                    docker build -t $IMAGE:${BUILD_NUMBER} .
+                    """
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh 'trivy image --format table -o trivyimage.txt $IMAGE:${BUILD_NUMBER}'
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS_ID,
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS')]) {
+
+                    sh """
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push $IMAGE:${BUILD_NUMBER}
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Minikube') {
+            steps {
+                sh """
+                kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
+                kubectl rollout status deployment/backend
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            emailext (
+                subject: "Backend Pipeline ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    Backend CI/CD Pipeline Result:
+                    Status: ${currentBuild.currentResult}
+                    Build: ${env.BUILD_NUMBER}
+                    URL: ${env.BUILD_URL}
+                """,
+                to: 'subhadeepghosh1270@gmail.com',
+                attachmentsPattern: 'backend/trivyfs.txt,backend/trivyimage.txt'
+            )
+        }
+    }
+}
