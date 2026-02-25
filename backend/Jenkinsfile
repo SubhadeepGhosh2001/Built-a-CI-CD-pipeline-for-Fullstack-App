@@ -10,9 +10,7 @@ pipeline {
     stages {
 
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
 
         stage('Checkout Code') {
@@ -57,16 +55,14 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 dir('backend') {
-                    sh """
-                    docker build -t $IMAGE:${BUILD_NUMBER} .
-                    """
+                    sh "docker build -t $IMAGE:${BUILD_NUMBER} ."
                 }
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --format table -o trivyimage.txt $IMAGE:${BUILD_NUMBER}'
+                sh "trivy image --format table -o trivyimage.txt $IMAGE:${BUILD_NUMBER}"
             }
         }
 
@@ -77,44 +73,44 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS')]) {
 
                     sh """
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                     docker push $IMAGE:${BUILD_NUMBER}
                     docker tag $IMAGE:${BUILD_NUMBER} $IMAGE:latest
-                    docker push $IMAGE:latest                    
+                    docker push $IMAGE:latest
                     """
                 }
             }
         }
-stage('Deploy to Minikube') {
-    steps {
-        dir('backend') {
-            withCredentials([file(credentialsId: 'backend-env', variable: 'ENV_FILE')]) {
-                sh """
-                echo "Creating Kubernetes Secret from Jenkins credential..."
-                kubectl delete secret backend-secret --ignore-not-found
-                kubectl create secret generic backend-secret --from-env-file=\$ENV_FILE
 
-                kubectl apply -f k8s/
-                kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
-                kubectl rollout status deployment/backend
-                kubectl get pods
-                kubectl get svc
-                """
+        stage('Deploy to Minikube') {
+            steps {
+                dir('backend') {
+                    withCredentials([file(credentialsId: 'backend-env', variable: 'ENV_FILE')]) {
+                        sh """
+                        echo "Creating Kubernetes Secret..."
+                        kubectl delete secret backend-secret --ignore-not-found
+                        kubectl create secret generic backend-secret --from-env-file=\$ENV_FILE
+                        kubectl apply -f k8s/
+                        kubectl set image deployment/backend backend=$IMAGE:${BUILD_NUMBER}
+                        kubectl rollout status deployment/backend
+                        kubectl get pods
+                        kubectl get svc
+                        """
+                    }
+                }
             }
         }
+
     }
-}
 
     post {
         always {
             emailext (
                 subject: "Backend Pipeline ${currentBuild.currentResult}: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-Backend CI/CD Pipeline Result:
+                body: """Backend CI/CD Pipeline Result:
 Status: ${currentBuild.currentResult}
 Build: ${env.BUILD_NUMBER}
-URL: ${env.BUILD_URL}
-                """,
+URL: ${env.BUILD_URL}""",
                 to: 'subhadeepghosh1270@gmail.com',
                 attachmentsPattern: 'backend/trivyfs.txt,backend/trivyimage.txt'
             )
