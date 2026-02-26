@@ -3,16 +3,18 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Install dependencies first (better caching)
+# Accept build arg
+ARG VITE_STREAM_API_KEY
+
+# Set env for Vite
+ENV VITE_STREAM_API_KEY=$VITE_STREAM_API_KEY
+
 COPY package*.json ./
 RUN npm install
 
-# Copy rest of the code
 COPY . .
 
-# Build the Vite app
 RUN npm run build
-
 
 # ---------- Stage 2: Serve ----------
 FROM nginx:alpine
