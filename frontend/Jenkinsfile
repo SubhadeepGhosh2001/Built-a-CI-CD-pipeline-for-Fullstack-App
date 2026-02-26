@@ -4,41 +4,20 @@ pipeline {
     environment {
         IMAGE = "subhadeep2001/chat-frontend"
         SONAR_HOST = "http://localhost:9000"
-        EMAIL = "subhadeepghosh1270@gmail.com"
     }
 
-    options {
-        timestamps()
-    }
+    options { timestamps() }
 
     stages {
 
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
 
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/SubhadeepGhosh2001/Built-a-CI-CD-pipeline-for-Fullstack-App.git'
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                dir('frontend') {
-                    sh 'npm install'
-                }
-            }
-        }
-
-        stage('Build Application') {
-            steps {
-                dir('frontend') {
-                    sh 'npm run build'
-                }
             }
         }
 
@@ -66,19 +45,24 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh """
-                docker build \
-                --build-arg VITE_API_URL=http://backend-service:5001/api \
-                -t $IMAGE:${BUILD_NUMBER} \
-                -t $IMAGE:latest \
-                frontend
-                """
+                withCredentials([string(credentialsId: 'STREAM_API_KEY', variable: 'STREAM_KEY')]) {
+                    dir('frontend') {
+                        sh """
+                        docker build \
+                          --no-cache \
+                          --build-arg VITE_STREAM_API_KEY=$STREAM_KEY \
+                          -t $IMAGE:${BUILD_NUMBER} \
+                          -t $IMAGE:latest \
+                          .
+                        """
+                    }
+                }
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE:${BUILD_NUMBER}'
+                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL $IMAGE:${BUILD_NUMBER}"
             }
         }
 
@@ -89,36 +73,32 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
+                    sh '''
                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                     docker push $IMAGE:${BUILD_NUMBER}
                     docker push $IMAGE:latest
-                    """
+                    '''
                 }
             }
         }
 
         stage('Deploy to Minikube') {
-    steps {
-        dir('frontend') {
-            sh """
-            kubectl apply -f k8s/
-            kubectl set image deployment/frontend \
-            frontend=$IMAGE:${BUILD_NUMBER}
-            kubectl rollout status deployment/frontend
-            kubectl get pods
-            kubectl get svc
-            """
+            steps {
+                dir('frontend') {
+                    sh """
+                    kubectl set image deployment/frontend frontend=$IMAGE:${BUILD_NUMBER}
+                    kubectl rollout status deployment/frontend
+                    """
+                }
+            }
         }
-    }
-}
     }
 
     post {
-    success {
-        mail to: 'subhadeepghosh1270@gmail.com',
-             subject: "Build Success",
-             body: "Pipeline completed successfully"
+        success {
+            mail to: 'subhadeepghosh1270@gmail.com',
+                 subject: "Frontend Build Success",
+                 body: "Pipeline completed successfully"
+        }
     }
-}
 }
